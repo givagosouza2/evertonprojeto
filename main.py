@@ -6,30 +6,33 @@ from matplotlib.patches import Ellipse
 import math
 
 st.set_page_config(layout="wide")
-st.title("Análise Vetorial + Elipse 95% (coordenadas espaciais)")
-
-st.markdown("""
-Este aplicativo calcula vetores a partir de coordenadas X e Y em série temporal e extrai:
-- **Número de toques**
-- **Intervalo médio entre toques**
-- **Somatória da resultante espacial** (∑‖Δr‖)
-- **Área da elipse que cobre 95%** das coordenadas espaciais (X,Y)
-Além da análise vetorial (ΔX, ΔY) com elipse de inércia e S-index.
-""")
+st.title("Análise Vetorial + Elipse 95% + Intervalos e Sequência de Toques")
 
 uploaded_file = st.file_uploader(
     "📄 Carregue um arquivo .txt ou .csv com colunas: Tempo, X, Y, ...", type=["txt", "csv"]
 )
 
 def _to_numeric(series):
-    """Converte para numérico e remove NaN."""
     return pd.to_numeric(series, errors="coerce")
 
+def infer_time_to_seconds(t):
+    """
+    Heurística simples:
+    - Se mediana de Δt > 20, assume ms (pois em segundos seria enorme para tapping).
+    - Se mediana de Δt <= 20, assume segundos.
+    Retorna t_em_segundos, unidade_detectada
+    """
+    dt = np.diff(t)
+    dt = dt[np.isfinite(dt)]
+    dt = dt[dt > 0]
+    if len(dt) == 0:
+        return t, "desconhecida"
+    med = np.median(dt)
+    if med > 20:  # muito provavelmente ms
+        return t / 1000.0, "ms→s"
+    return t, "s"
+
 def calcular_elipse_inercia(x, y):
-    """
-    Elipse baseada na covariância (PCA).
-    Retorna eixos (1-sigma), razão, ângulo, s-index, autovetores e autovalores.
-    """
     X = np.vstack([x, y])
     cov = np.cov(X)
     eigvals, eigvecs = np.linalg.eig(cov)
@@ -37,32 +40,19 @@ def calcular_elipse_inercia(x, y):
     eigvals = eigvals[order]
     eigvecs = eigvecs[:, order]
 
-    # 1-sigma (desvio padrão) em cada eixo principal
     eixo_maior = np.sqrt(max(eigvals[0], 0))
     eixo_menor = np.sqrt(max(eigvals[1], 0))
-
     razao = eixo_maior / eixo_menor if eixo_menor != 0 else np.inf
     angulo = np.degrees(np.arctan2(*eigvecs[:, 0][::-1]))
     s_index = razao
     return eixo_maior, eixo_menor, razao, angulo, s_index, eigvecs, eigvals
 
 def elipse_95_xy(x, y):
-    """
-    Elipse de confiança 95% para dados 2D assumindo normalidade:
-    (p - mu)^T Sigma^{-1} (p - mu) <= chi2(0.95, df=2)
-    Para df=2, chi2_0.95 ≈ 5.991.
-    """
-    chi2_95_df2 = 5.991464547107979  # constante (95%, df=2)
-
+    chi2_95_df2 = 5.991464547107979  # 95%, df=2
     mu_x, mu_y = np.mean(x), np.mean(y)
     _, _, _, ang, _, eigvecs, eigvals = calcular_elipse_inercia(x, y)
-
-    # Semi-eixos (raios) da elipse 95%
-    # sqrt(chi2) * sqrt(lambda)  (lambda = autovalor)
-    a = np.sqrt(chi2_95_df2 * max(eigvals[0], 0))  # semi-eixo maior
-    b = np.sqrt(chi2_95_df2 * max(eigvals[1], 0))  # semi-eixo menor
-
-    # Área = pi*a*b
+    a = np.sqrt(chi2_95_df2 * max(eigvals[0], 0))
+    b = np.sqrt(chi2_95_df2 * max(eigvals[1], 0))
     area = math.pi * a * b
     return (mu_x, mu_y), a, b, ang, area, eigvals, eigvecs
 
@@ -73,7 +63,6 @@ if uploaded_file:
         st.error("O arquivo deve conter pelo menos três colunas: tempo, X e Y.")
         st.stop()
 
-    # Tempo, X, Y (por posição no seu arquivo)
     t_raw = _to_numeric(df.iloc[:, 0])
     x_raw = _to_numeric(df.iloc[:, 1])
     y_raw = _to_numeric(df.iloc[:, 2])
@@ -89,60 +78,97 @@ if uploaded_file:
     x = dfv["x"].to_numpy()
     y = dfv["y"].to_numpy()
 
-    # --- Métricas solicitadas ---
-    n_toques = len(x)  # número de pontos (toques)
+    # Converter tempo para segundos se necessário
+    t_sec, time_unit = infer_time_to_seconds(t)
 
-    dt = np.diff(t)
+    # Métricas básicas
+    n_toques = len(x)
+
+    dt = np.diff(t_sec)
     dt = dt[np.isfinite(dt)]
-    dt = dt[dt > 0]  # ignora zeros/negativos (caso tempo esteja duplicado ou invertido)
+    dt = dt[dt > 0]
     intervalo_medio = float(np.mean(dt)) if len(dt) else np.nan
 
     dx = np.diff(x)
     dy = np.diff(y)
-
-    # resultante espacial por passo e somatória
     dr = np.sqrt(dx**2 + dy**2)
     soma_resultante_espacial = float(np.nansum(dr))
 
-    # --- Elipse 95% das coordenadas espaciais (X,Y) ---
+    # Elipse 95% em (X,Y)
     (cx, cy), a95, b95, ang95, area95, eigvals_xy, eigvecs_xy = elipse_95_xy(x, y)
 
-    # --- Elipse (ΔX, ΔY) do seu pipeline original ---
+    # Elipse em vetores (ΔX,ΔY)
     eixo_maior, eixo_menor, razao, angulo, s_index, eigvecs, eigvals = calcular_elipse_inercia(dx, dy)
 
     st.subheader("📊 Métricas principais")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Nº de toques", f"{n_toques}")
-    c2.metric("Intervalo médio entre toques", f"{intervalo_medio:.4f}" if np.isfinite(intervalo_medio) else "—")
+    c2.metric("Intervalo médio entre toques (s)", f"{intervalo_medio:.4f}" if np.isfinite(intervalo_medio) else "—")
     c3.metric("∑ resultante espacial (∑‖Δr‖)", f"{soma_resultante_espacial:.4f}")
     c4.metric("Área elipse 95% (X,Y)", f"{area95:.4f}")
 
-    st.subheader("📌 Elipse 95% nas coordenadas espaciais (X,Y)")
-    st.write(f"Centro (média): ({cx:.2f}, {cy:.2f})")
-    st.write(f"Semi-eixo maior (95%): {a95:.4f}")
-    st.write(f"Semi-eixo menor (95%): {b95:.4f}")
-    st.write(f"Ângulo (graus): {ang95:.2f}°")
+    st.caption(f"Tempo interpretado como: **{time_unit}**")
 
-    st.subheader("📈 Elipse vetorial (ΔX, ΔY) e S-index")
-    st.write(f"**Eixo maior (1σ):** {eixo_maior:.4f}")
-    st.write(f"**Eixo menor (1σ):** {eixo_menor:.4f}")
-    st.write(f"**Razão entre eixos:** {razao:.4f}")
-    st.write(f"**Ângulo (graus):** {angulo:.2f}°")
-    st.write(f"**S-index:** {s_index:.4f}")
+    # =========================================================
+    # NOVO: GRÁFICO DO INTERVALO ENTRE TOQUES + SEQUÊNCIA
+    # =========================================================
+    st.subheader("⏱ Intervalo entre toques e sequência dos toques")
 
-    # --- Plots ---
+    colA, colB = st.columns(2)
+
+    with colA:
+        st.markdown("### Δt entre toques (em segundos)")
+        if len(dt) > 0:
+            fig_dt, ax_dt = plt.subplots(figsize=(8, 4))
+            ax_dt.plot(np.arange(1, len(dt) + 1), dt, marker="o")
+            ax_dt.set_title("Intervalo entre toques (Δt) ao longo da sequência")
+            ax_dt.set_xlabel("Índice do intervalo (entre toque i-1 e i)")
+            ax_dt.set_ylabel("Δt (s)")
+            ax_dt.grid(True, alpha=0.3)
+            st.pyplot(fig_dt)
+        else:
+            st.info("Não foi possível calcular Δt (verifique a coluna de tempo).")
+
+    with colB:
+        st.markdown("### Sequência dos toques")
+        idx = np.arange(1, n_toques + 1)
+
+        fig_seq, ax_seq = plt.subplots(figsize=(8, 4))
+        ax_seq.plot(idx, x, marker="o", label="X")
+        ax_seq.plot(idx, y, marker="o", label="Y")
+        ax_seq.set_title("X e Y ao longo da sequência de toques")
+        ax_seq.set_xlabel("Índice do toque")
+        ax_seq.set_ylabel("Coordenada")
+        ax_seq.grid(True, alpha=0.3)
+        ax_seq.legend()
+        st.pyplot(fig_seq)
+
+    # Opcional: distância entre toques ao longo da sequência
+    st.markdown("### (Opcional) Distância entre toques ao longo da sequência")
+    if len(dr) > 0:
+        fig_dr, ax_dr = plt.subplots(figsize=(12, 3.5))
+        ax_dr.plot(np.arange(1, len(dr) + 1), dr, marker="o")
+        ax_dr.set_title("Distância entre toques consecutivos (‖Δr‖)")
+        ax_dr.set_xlabel("Índice do deslocamento (entre toque i e i+1)")
+        ax_dr.set_ylabel("‖Δr‖ (unid. do X/Y)")
+        ax_dr.grid(True, alpha=0.3)
+        st.pyplot(fig_dr)
+
+    # =========================================================
+    # Seus plots originais (com a elipse 95% em X,Y adicionada)
+    # =========================================================
+    st.subheader("📍 Posições (X,Y) + Elipse 95% / Vetores (ΔX,ΔY) + Elipse")
+
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📍 Passo 1: Posições (X,Y) + Elipse 95%")
         fig1, ax1 = plt.subplots(figsize=(8, 8))
         ax1.plot(x, y, "o-", alpha=0.6, label="Trajetória")
 
-        # Elipse 95% em X,Y
         ellipse_xy = Ellipse(
             (cx, cy),
-            width=2 * a95,   # largura = 2*semi-eixo
-            height=2 * b95,  # altura = 2*semi-eixo
+            width=2 * a95,
+            height=2 * b95,
             angle=ang95,
             edgecolor="red",
             fc="None",
@@ -159,7 +185,6 @@ if uploaded_file:
         st.pyplot(fig1)
 
     with col2:
-        st.subheader("📈 Passo 2: Vetores (ΔX,ΔY) + Elipse de inércia")
         fig2, ax2 = plt.subplots(figsize=(8, 8))
         ax2.scatter(dx, dy, alpha=0.6, label="Vetores de deslocamento")
 
@@ -168,7 +193,6 @@ if uploaded_file:
             angles="xy", scale_units="xy", scale=1, color="blue", alpha=0.5
         )
 
-        # Elipse 1-sigma em ΔX,ΔY (a sua)
         width, height = 2 * np.sqrt(np.maximum(eigvals, 0))
         ellipse = Ellipse((0, 0), width, height, angle=angulo,
                           edgecolor="red", fc="None", lw=2, label="Elipse (1σ) ΔX,ΔY")
@@ -178,58 +202,10 @@ if uploaded_file:
         ax2.axvline(0, color="black", lw=1)
         ax2.set_aspect("equal")
         ax2.legend()
-        ax2.set_title("Distribuição Vetorial com Setas e Elipse")
+        ax2.set_title(f"Distribuição Vetorial com Setas e Elipse | S-index={s_index:.2f}")
         ax2.set_xlabel("ΔX")
         ax2.set_ylabel("ΔY")
         st.pyplot(fig2)
-
-    # --- Animação frame a frame (mantida, mas com proteção de índice) ---
-    st.subheader("🎮 Passo 3: Animação frame a frame")
-    max_frame = len(dx) - 1  # evita estourar índice quando usa dx[frame]
-    if max_frame < 1:
-        st.info("Poucos pontos para animação.")
-        st.stop()
-
-    frame = st.slider("Deslize para visualizar:", 0, max_frame, 1)
-
-    fig3, (ax3a, ax3b) = plt.subplots(1, 2, figsize=(14, 6))
-
-    ax3a.plot(x[:frame+1], y[:frame+1], "-", color="black")
-    for i in range(frame):
-        ax3a.arrow(x[i], y[i], dx[i], dy[i], head_width=2, head_length=2, fc="gray", ec="black")
-    ax3a.arrow(x[frame], y[frame], dx[frame], dy[frame], head_width=2, head_length=2, fc="blue", ec="black")
-
-    ax3a.set_title("Trajetória acumulada com vetores")
-    ax3a.set_xlabel("X")
-    ax3a.set_ylabel("Y")
-    ax3a.set_xlim(min(x), max(x))
-    ax3a.set_ylim(min(y), max(y))
-
-    ax3b.quiver(
-        np.zeros_like(dx[:frame+1]), np.zeros_like(dy[:frame+1]),
-        dx[:frame+1], dy[:frame+1],
-        angles="xy", scale_units="xy", scale=1, color="black", alpha=0.5
-    )
-
-    if frame > 2:
-        eixo_maior_f, eixo_menor_f, razao_f, angulo_f, s_index_f, eigvecs_f, eigvals_f = calcular_elipse_inercia(
-            dx[:frame+1], dy[:frame+1]
-        )
-        width_f, height_f = 2 * np.sqrt(np.maximum(eigvals_f, 0))
-        ellipse_f = Ellipse((0, 0), width_f, height_f, angle=angulo_f, edgecolor="red", fc="None", lw=2)
-        ax3b.add_patch(ellipse_f)
-        ax3b.set_title(f"Vetores até o frame {frame}\nS-index parcial: {s_index_f:.2f}")
-    else:
-        ax3b.set_title("Vetores acumulados")
-
-    ax3b.axhline(0, color="black", lw=1)
-    ax3b.axvline(0, color="black", lw=1)
-    ax3b.set_xlabel("ΔX")
-    ax3b.set_ylabel("ΔY")
-    ax3b.set_xlim(-100, 100)
-    ax3b.set_ylim(-100, 100)
-
-    st.pyplot(fig3)
 
 else:
     st.info("Aguardando upload de arquivo com colunas: tempo, X, Y...")
