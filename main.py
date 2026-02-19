@@ -164,31 +164,35 @@ if uploaded_file:
     with col1:
         fig1, ax1 = plt.subplots(figsize=(8, 8))
         ax1.plot(x, y, "o-", alpha=0.6, label="Trajetória")
-        ax1.plot([0,0,1440,1440,0],[0,2730,2730,0,0],'-w')
+        
+        rect = Rectangle((0,0), 1440, 2730,
+                         linewidth=1, edgecolor='black',
+                         facecolor='none')
+        ax1.add_patch(rect)
+        
         ellipse_xy = Ellipse(
             (cx, cy),
-            width=2 * a95,
-            height=2 * b95,
+            width=2*a95,
+            height=2*b95,
             angle=ang95,
             edgecolor="red",
             fc="None",
             lw=2,
-            label="Elipse 95% (X,Y)"
+            label="Elipse 95%"
         )
+        
         ax1.add_patch(ellipse_xy)
-
+        
+        ax1.set_aspect("equal", adjustable="box")
+        ax1.set_xlim(0,1440)
+        ax1.set_ylim(0,2730)
+        
         ax1.set_title("Coordenadas espaciais (X, Y) + Elipse 95%")
         ax1.set_xlabel("X")
         ax1.set_ylabel("Y")
-        #ax1.set_aspect("equal", adjustable="datalim")
-        ax1.set_aspect("equal", adjustable="box")
-        ax1.spines['top'].set_visible(False)
-        ax1.spines['right'].set_visible(False)
-        ax1.grid(False)
-        ax1.set_xlim(0,2730)
-        ax1.set_ylim(0,2730)
         ax1.legend()
-        st.pyplot(fig1)
+        
+        st.pyplot(fig1, clear_figure=True)
 
     with col2:
         fig2, ax2 = plt.subplots(figsize=(8, 8))
