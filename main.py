@@ -164,7 +164,7 @@ if uploaded_file:
     with col1:
         fig1, ax1 = plt.subplots(figsize=(8, 8))
         ax1.plot(x, y, "o-", alpha=0.6, label="Trajetória")
-
+        ax1.plot([0,0,1440,1440,0],[0,2730,2730,0,0],'-w')
         ellipse_xy = Ellipse(
             (cx, cy),
             width=2 * a95,
