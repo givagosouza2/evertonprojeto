@@ -180,7 +180,7 @@ if uploaded_file:
         ax1.set_title("Coordenadas espaciais (X, Y) + Elipse 95%")
         ax1.set_xlabel("X")
         ax1.set_ylabel("Y")
-        ax1.set_aspect("equal", adjustable="datalim")
+        #ax1.set_aspect("equal", adjustable="datalim")
         ax1.legend()
         st.pyplot(fig1)
 
