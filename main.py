@@ -159,7 +159,7 @@ if uploaded_file:
     # =========================================================
     st.subheader("📍 Posições (X,Y) + Elipse 95% / Vetores (ΔX,ΔY) + Elipse")
 
-    col1, col2 = st.columns([0.3,1])
+    col1, col2 = st.columns([0.5,1])
 
     with col1:
         fig1, ax1 = plt.subplots(figsize=(8, 8))
