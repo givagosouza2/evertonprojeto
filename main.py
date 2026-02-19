@@ -181,8 +181,8 @@ if uploaded_file:
         ax1.set_xlabel("X")
         ax1.set_ylabel("Y")
         #ax1.set_aspect("equal", adjustable="datalim")
-        ax1.xlim(0,1440)
-        ax1.ylim(0,2730)
+        ax1.set_xlim(0,1440)
+        ax1.set_ylim(0,2730)
         ax1.legend()
         st.pyplot(fig1)
 
