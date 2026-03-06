@@ -18,55 +18,47 @@ def _to_numeric(series):
     return pd.to_numeric(series, errors="coerce")
 
 def ler_arquivo(uploaded_file):
-    """
-    Lê arquivos txt/csv tentando vários separadores.
-    Prioriza TAB, que é o caso do arquivo anexado.
-    """
     raw = uploaded_file.read()
     text = raw.decode("utf-8-sig", errors="ignore")
 
-    tentativas = [
-        r"\t+",          # tab
-        r";",            # ponto e vírgula
-        r",",            # vírgula
-        r"\s+"           # espaços
-    ]
+    # 1) tenta TAB, que é o caso do arquivo anexado
+    try:
+        df = pd.read_csv(
+            io.StringIO(text),
+            sep="\t",
+            engine="python",
+            skipinitialspace=True
+        )
+        if df.shape[1] >= 3:
+            df.columns = [str(c).strip() for c in df.columns]
+            return df
+    except Exception:
+        pass
 
-    melhor_df = None
-    max_cols = 0
+    # 2) tenta separador automático mais amplo
+    try:
+        df = pd.read_csv(
+            io.StringIO(text),
+            sep=r"[;,]|\s{2,}",
+            engine="python"
+        )
+        if df.shape[1] >= 3:
+            df.columns = [str(c).strip() for c in df.columns]
+            return df
+    except Exception:
+        pass
 
-    for sep in tentativas:
-        try:
-            df = pd.read_csv(io.StringIO(text), sep=sep, engine="python")
-            if df.shape[1] > max_cols:
-                melhor_df = df.copy()
-                max_cols = df.shape[1]
-        except Exception:
-            pass
-
-    if melhor_df is None:
-        raise ValueError("Não foi possível ler o arquivo.")
-
-    melhor_df.columns = [str(c).strip() for c in melhor_df.columns]
-    return melhor_df
+    # 3) fallback
+    df = pd.read_csv(io.StringIO(text), sep=None, engine="python")
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
 
 def selecionar_colunas(df):
-    """
-    Procura colunas por nome; se não achar, usa as 3 primeiras.
-    """
-    cols_lower = {str(c).strip().lower(): c for c in df.columns}
+    cols = {str(c).strip().lower(): c for c in df.columns}
 
-    t_col = None
-    x_col = None
-    y_col = None
-
-    for k, c in cols_lower.items():
-        if k in ["time", "tempo", "t"]:
-            t_col = c
-        elif k == "x":
-            x_col = c
-        elif k == "y":
-            y_col = c
+    t_col = cols.get("time", None)
+    x_col = cols.get("x", None)
+    y_col = cols.get("y", None)
 
     if t_col is None:
         t_col = df.columns[0]
@@ -78,11 +70,6 @@ def selecionar_colunas(df):
     return t_col, x_col, y_col
 
 def infer_time_to_seconds(t):
-    """
-    Heurística simples:
-    - Se mediana de Δt > 20, assume ms.
-    - Se mediana de Δt <= 20, assume segundos.
-    """
     dt = np.diff(t)
     dt = dt[np.isfinite(dt)]
     dt = dt[dt > 0]
@@ -109,7 +96,6 @@ def calcular_elipse_inercia(x, y):
     razao = eixo_maior / eixo_menor if eixo_menor != 0 else np.inf
     angulo = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
     s_index = razao
-
     return eixo_maior, eixo_menor, razao, angulo, s_index, eigvecs, eigvals
 
 def elipse_95_xy(x, y):
@@ -125,6 +111,9 @@ if uploaded_file:
     try:
         df = ler_arquivo(uploaded_file)
 
+        st.write("Colunas detectadas:", list(df.columns))
+        st.dataframe(df.head())
+
         if df.shape[1] < 3:
             st.error("O arquivo deve conter pelo menos três colunas: tempo, X e Y.")
             st.stop()
@@ -136,11 +125,14 @@ if uploaded_file:
         y_raw = _to_numeric(df[y_col])
 
         valid = (~t_raw.isna()) & (~x_raw.isna()) & (~y_raw.isna())
+
         dfv = pd.DataFrame({
             "t": t_raw[valid],
             "x": x_raw[valid],
             "y": y_raw[valid]
         }).reset_index(drop=True)
+
+        st.write(f"Pontos válidos após limpeza: {len(dfv)}")
 
         if len(dfv) < 3:
             st.error("Poucos pontos válidos após limpeza. Verifique o arquivo.")
@@ -150,10 +142,15 @@ if uploaded_file:
         x = dfv["x"].to_numpy()
         y = dfv["y"].to_numpy()
 
-        # tempo em segundos
+        dx = np.diff(x)
+        dy = np.diff(y)
+
+        if len(dx) < 2:
+            st.error("O arquivo não possui dados suficientes para calcular vetores.")
+            st.stop()
+
         t_sec, time_unit = infer_time_to_seconds(t)
 
-        # métricas básicas
         n_toques = len(x)
 
         dt = np.diff(t_sec)
@@ -161,15 +158,10 @@ if uploaded_file:
         dt = dt[dt > 0]
         intervalo_medio = float(np.mean(dt)) if len(dt) else np.nan
 
-        dx = np.diff(x)
-        dy = np.diff(y)
         dr = np.sqrt(dx**2 + dy**2)
         soma_resultante_espacial = float(np.nansum(dr))
 
-        # elipse 95% em (X,Y)
         (cx, cy), a95, b95, ang95, area95, eigvals_xy, eigvecs_xy = elipse_95_xy(x, y)
-
-        # elipse em vetores (ΔX,ΔY)
         eixo_maior, eixo_menor, razao, angulo, s_index, eigvecs, eigvals = calcular_elipse_inercia(dx, dy)
 
         st.subheader("📊 Métricas principais")
@@ -187,39 +179,33 @@ if uploaded_file:
         colA, colB = st.columns(2)
 
         with colA:
-            st.markdown("### Δt entre toques (em segundos)")
             if len(dt) > 0:
                 fig_dt, ax_dt = plt.subplots(figsize=(8, 4))
                 ax_dt.plot(np.arange(1, len(dt) + 1), dt, marker="o")
-                ax_dt.set_title("Intervalo entre toques (Δt) ao longo da sequência")
-                ax_dt.set_xlabel("Índice do intervalo (entre toque i-1 e i)")
+                ax_dt.set_title("Intervalo entre toques (Δt)")
+                ax_dt.set_xlabel("Índice do intervalo")
                 ax_dt.set_ylabel("Δt (s)")
                 ax_dt.grid(True, alpha=0.3)
                 st.pyplot(fig_dt)
-            else:
-                st.info("Não foi possível calcular Δt (verifique a coluna de tempo).")
 
         with colB:
-            st.markdown("### Sequência dos toques")
             idx = np.arange(1, n_toques + 1)
-
             fig_seq, ax_seq = plt.subplots(figsize=(8, 4))
             ax_seq.plot(idx, x, marker="o", label="X")
             ax_seq.plot(idx, y, marker="o", label="Y")
-            ax_seq.set_title("X e Y ao longo da sequência de toques")
+            ax_seq.set_title("X e Y ao longo da sequência")
             ax_seq.set_xlabel("Índice do toque")
             ax_seq.set_ylabel("Coordenada")
             ax_seq.grid(True, alpha=0.3)
             ax_seq.legend()
             st.pyplot(fig_seq)
 
-        st.markdown("### Distância entre toques ao longo da sequência")
         if len(dr) > 0:
             fig_dr, ax_dr = plt.subplots(figsize=(12, 3.5))
             ax_dr.plot(np.arange(1, len(dr) + 1), dr, marker="o")
             ax_dr.set_title("Distância entre toques consecutivos (‖Δr‖)")
-            ax_dr.set_xlabel("Índice do deslocamento (entre toque i e i+1)")
-            ax_dr.set_ylabel("‖Δr‖ (unid. do X/Y)")
+            ax_dr.set_xlabel("Índice do deslocamento")
+            ax_dr.set_ylabel("‖Δr‖")
             ax_dr.grid(True, alpha=0.3)
             st.pyplot(fig_dr)
 
@@ -231,10 +217,7 @@ if uploaded_file:
             fig1, ax1 = plt.subplots(figsize=(8, 8))
             ax1.plot(x, y, "o-", alpha=0.6, label="Trajetória")
 
-            rect = Rectangle(
-                (0, 0), 1440, 2730,
-                linewidth=1, edgecolor="black", facecolor="none"
-            )
+            rect = Rectangle((0, 0), 1440, 2730, linewidth=1, edgecolor="black", facecolor="none")
             ax1.add_patch(rect)
 
             ellipse_xy = Ellipse(
@@ -261,7 +244,6 @@ if uploaded_file:
         with col2:
             fig2, ax2 = plt.subplots(figsize=(8, 8))
             ax2.scatter(dx, dy, alpha=0.6, label="Vetores de deslocamento")
-
             ax2.quiver(
                 np.zeros_like(dx), np.zeros_like(dy), dx, dy,
                 angles="xy", scale_units="xy", scale=1, color="blue", alpha=0.5
