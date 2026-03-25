@@ -180,7 +180,7 @@ if uploaded_file:
 
         with colA:
             if len(dt) > 0:
-                fig_dt, ax_dt = plt.subplots(figsize=(8, 4))
+                fig_dt, ax_dt = plt.subplots(figsize=(12, 4))
                 ax_dt.plot(t_sec[0:-1], dt, marker="o")
                 ax_dt.set_xlabel("Time (s)")
                 ax_dt.set_ylabel("Intertap interval (s)")
@@ -200,7 +200,7 @@ if uploaded_file:
             st.pyplot(fig_seq)
 
         if len(dr) > 0:
-            fig_dr, ax_dr = plt.subplots(figsize=(12, 3.5))
+            fig_dr, ax_dr = plt.subplots(figsize=(12, 4))
             ax_dr.plot(t_sec[0:-1], dr, marker="o")
             ax_dr.set_xlabel("Time (s)")
             ax_dr.set_ylabel("‖Δr‖")
