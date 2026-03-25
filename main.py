@@ -258,7 +258,7 @@ if uploaded_file:
             ax2.axvline(0, color="black", lw=1)
             ax2.set_aspect("equal")
             ax2.legend()
-            ax2.set_title(f"Distribuição Vetorial com Setas e Elipse | S-index={s_index:.2f}")
+            #ax2.set_title(f"Distribuição Vetorial com Setas e Elipse | S-index={s_index:.2f}")
             ax2.set_xlabel("ΔX")
             ax2.set_ylabel("ΔY")
             st.pyplot(fig2)
