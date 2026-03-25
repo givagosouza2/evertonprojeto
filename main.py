@@ -181,10 +181,9 @@ if uploaded_file:
         with colA:
             if len(dt) > 0:
                 fig_dt, ax_dt = plt.subplots(figsize=(8, 4))
-                ax_dt.plot(np.arange(1, len(dt) + 1), dt, marker="o")
-                ax_dt.set_title("Intervalo entre toques (Δt)")
-                ax_dt.set_xlabel("Índice do intervalo")
-                ax_dt.set_ylabel("Δt (s)")
+                ax_dt.plot(t_sec, dt, marker="o")
+                ax_dt.set_xlabel("Time (s)")
+                ax_dt.set_ylabel("Intertap interval (s)")
                 ax_dt.grid(True, alpha=0.3)
                 st.pyplot(fig_dt)
 
