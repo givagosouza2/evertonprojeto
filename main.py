@@ -233,7 +233,7 @@ if uploaded_file:
             ax1.set_aspect("equal", adjustable="box")
             ax1.set_xlim(0, 1440)
             ax1.set_ylim(0, 2730)
-            ax1.set_title("Coordenadas espaciais (X, Y) + Elipse 95%")
+            #ax1.set_title("Coordenadas espaciais (X, Y) + Elipse 95%")
             ax1.set_xlabel("X")
             ax1.set_ylabel("Y")
             ax1.legend()
