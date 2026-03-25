@@ -185,6 +185,8 @@ if uploaded_file:
                 ax_dt.set_xlabel("Time (s)")
                 ax_dt.set_ylabel("Intertap interval (s)")
                 ax_dt.grid(True, alpha=0.3)
+                ax_dt.set_xlim(0, 30)
+                ax_dt.set_ylim(0, 0.6)
                 st.pyplot(fig_dt)
 
         with colB:
@@ -204,6 +206,8 @@ if uploaded_file:
             ax_dr.plot(t_sec[0:-1], dr, marker="o")
             ax_dr.set_xlabel("Time (s)")
             ax_dr.set_ylabel("‖Δr‖")
+            ax_dr.set_xlim(0, 30)
+            ax_dr.set_ylim(0, 100)
             ax_dr.grid(True, alpha=0.3)
             st.pyplot(fig_dr)
 
