@@ -201,7 +201,7 @@ if uploaded_file:
 
         if len(dr) > 0:
             fig_dr, ax_dr = plt.subplots(figsize=(12, 3.5))
-            ax_dr.plot(np.arange(1, len(dr) + 1), dr, marker="o")
+            ax_dr.plot(t_sec, dr, marker="o")
             ax_dr.set_title("Distância entre toques consecutivos (‖Δr‖)")
             ax_dr.set_xlabel("Índice do deslocamento")
             ax_dr.set_ylabel("‖Δr‖")
