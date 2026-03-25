@@ -181,7 +181,7 @@ if uploaded_file:
         with colA:
             if len(dt) > 0:
                 fig_dt, ax_dt = plt.subplots(figsize=(8, 4))
-                ax_dt.plot(t_sec[1:end], dt, marker="o")
+                ax_dt.plot(t_sec[0:-1], dt, marker="o")
                 ax_dt.set_xlabel("Time (s)")
                 ax_dt.set_ylabel("Intertap interval (s)")
                 ax_dt.grid(True, alpha=0.3)
